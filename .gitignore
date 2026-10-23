@@ -28,3 +28,6 @@ Thumbs.db
 *.faiss
 *.index
 chroma_db/
+
+storage/
+data/papers/*.pdf

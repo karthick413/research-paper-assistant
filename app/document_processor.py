@@ -1,44 +1,89 @@
 
 from pathlib import Path
 
-import pymupdf  # PyMuPDF
+import fitz  # PyMuPDF
 
 
-def extract_pages(pdf_path: str) -> list[dict]:
-    """Extract text while preserving PDF page numbers."""
+def extract_pages(pdf_path: str | Path) -> list[dict]:
+    """
+    Extract readable text from a PDF.
 
-    pdf_file = Path(pdf_path)
+    Returns:
+        A list of dictionaries containing:
+        - source: PDF filename
+        - page: Original, 1-based page number
+        - text: Extracted page text
+    """
+    path = Path(pdf_path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"PDF file not found: {path}"
+        )
+
+    if not path.is_file():
+        raise ValueError(
+            f"The provided path is not a file: {path}"
+        )
+
+    if path.suffix.lower() != ".pdf":
+        raise ValueError(
+            f"Expected a PDF file, received: {path.name}"
+        )
+
     pages = []
 
-    with pymupdf.open(pdf_file) as pdf:
-        for page_number, page in enumerate(pdf, start=1):
-            text = page.get_text("text").strip()
+    try:
+        with fitz.open(path) as pdf:
+            if pdf.page_count == 0:
+                raise ValueError(
+                    f"The PDF contains no pages: {path.name}"
+                )
 
-            if text:
+            for page_number, page in enumerate(pdf, start=1):
+                text = page.get_text("text").strip()
+
+                # Skip pages with no extractable text.
+                if not text:
+                    continue
+
                 pages.append(
                     {
-                        "source": pdf_file.name,
+                        "source": path.name,
                         "page": page_number,
                         "text": text,
                     }
                 )
 
+    except (FileNotFoundError, ValueError):
+        raise
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not read PDF '{path.name}': {exc}"
+        ) from exc
+
     return pages
 
 
-if __name__ == "__main__":
-    papers_folder = Path("data/papers")
-    pdf_files = list(papers_folder.glob("*.pdf"))
+def extract_pdf_info(pdf_path: str | Path) -> dict:
+    """
+    Return basic PDF information without extracting all page text.
+    """
+    path = Path(pdf_path)
 
-    if not pdf_files:
-        print("No PDFs found in data/papers/")
-    else:
-        for pdf_file in pdf_files:
-            pages = extract_pages(str(pdf_file))
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"PDF file not found: {path}"
+        )
 
-            print(f"\nPDF: {pdf_file.name}")
-            print(f"Pages with extracted text: {len(pages)}")
-
-            if pages:
-                print("First page preview:")
-                print(pages[0]["text"][:500])
+    try:
+        with fitz.open(path) as pdf:
+            return {
+                "source": path.name,
+                "total_pages": pdf.page_count,
+                "metadata": pdf.metadata or {},
+            }
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not inspect PDF '{path.name}': {exc}"
+        ) from exc

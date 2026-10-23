@@ -1,66 +1,55 @@
 
-from pathlib import Path
-
-from document_processor import extract_pages
+from app.config import CHUNK_SIZE, CHUNK_OVERLAP
 
 
 def chunk_pages(
     pages: list[dict],
-    chunk_size: int = 1000,
-    overlap: int = 200,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
 ) -> list[dict]:
-    """Split page text into overlapping character-based chunks."""
+    """
+    Split extracted PDF pages into overlapping text chunks.
+
+    Each chunk preserves its PDF filename and original page number.
+    """
 
     if chunk_size <= 0:
-        raise ValueError("chunk_size must be positive")
+        raise ValueError("chunk_size must be greater than zero.")
 
     if overlap < 0 or overlap >= chunk_size:
-        raise ValueError("overlap must be >= 0 and < chunk_size")
+        raise ValueError(
+            "overlap must be non-negative and smaller than chunk_size."
+        )
 
     chunks = []
+    step = chunk_size - overlap
 
     for page in pages:
-        text = page["text"]
-        start = 0
+        source = page.get("source")
+        page_number = page.get("page")
+        text = " ".join(str(page.get("text", "")).split())
 
-        while start < len(text):
-            end = min(start + chunk_size, len(text))
-            chunk_text = text[start:end].strip()
+        if not text:
+            continue
+
+        if not source or page_number is None:
+            raise ValueError(
+                "Every page must contain 'source', 'page', and 'text'."
+            )
+
+        for start in range(0, len(text), step):
+            chunk_text = text[start:start + chunk_size].strip()
 
             if chunk_text:
                 chunks.append(
                     {
+                        "source": str(source),
+                        "page": int(page_number),
                         "text": chunk_text,
-                        "source": page["source"],
-                        "page": page["page"],
                     }
                 )
 
-            if end == len(text):
+            if start + chunk_size >= len(text):
                 break
 
-            start = end - overlap
-
     return chunks
-
-
-if __name__ == "__main__":
-    papers_folder = Path("data/papers")
-    all_chunks = []
-
-    for pdf_file in sorted(papers_folder.glob("*.pdf")):
-        pages = extract_pages(str(pdf_file))
-        chunks = chunk_pages(pages)
-        all_chunks.extend(chunks)
-
-        print(f"\nPDF: {pdf_file.name}")
-        print(f"Pages extracted: {len(pages)}")
-        print(f"Chunks created: {len(chunks)}")
-
-    print(f"\nTOTAL CHUNKS: {len(all_chunks)}")
-
-    if all_chunks:
-        print("\nFIRST CHUNK")
-        print("Source:", all_chunks[0]["source"])
-        print("Page:", all_chunks[0]["page"])
-        print("Text:", all_chunks[0]["text"][:300])
